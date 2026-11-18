@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>金種カウンター Pro | 硬貨・紙幣計算ツール</title>
+  
+  <!-- Google Fonts: Inter & JetBrains Mono & Noto Sans JP -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- html2canvas (JPEG出力用) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Inter"', '"Noto Sans JP"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            slate: {
+              850: '#151e2e',
+              925: '#0c121e',
+              950: '#070b14',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* カスタムスクロールバー */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* 数値入力のスピンボタン非表示 */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type="number"] {
+      -moz-appearance: textfield;
+    }
+
+    /* ボタン押下アニメーション */
+    .btn-press {
+      transition: transform 0.08s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease, box-shadow 0.15s ease;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-press:active {
+      transform: scale(0.95);
+    }
+
+    /* カウント更新時のフラッシュアニメーション */
+    @keyframes popHighlight {
+      0% { transform: scale(1.12); color: #38bdf8; }
+      100% { transform: scale(1); }
+    }
+    .animate-pop {
+      animation: popHighlight 0.22s ease-out;
+    }
+
+    /* タッチモードとPCキーモードのスタイル調整 */
+    body.mode-touch .count-btn {
+      padding-top: 0.85rem;
+      padding-bottom: 0.85rem;
+      font-size: 1.05rem;
+    }
+    body.mode-pc .count-btn {
+      padding-top: 0.45rem;
+      padding-bottom: 0.45rem;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-sky-500 selection:text-white">
+
+  <!-- トップヘッダー -->
+  <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2">
+      <!-- ロゴ・タイトル -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-amber-500/20">
+          ¥
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-white flex items-center gap-2">
+            金種カウンター <span class="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400 border border-sky-500/30">PRO</span>
+          </h1>
+          <p class="text-[11px] text-slate-400 hidden sm:block">硬貨・紙幣 リアルタイム集計システム</p>
+        </div>
+      </div>
+
+      <!-- コントロールバー（操作モード切替 / 修正モード / 履歴） -->
+      <div class="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
+        
+        <!-- 操作モード切替（タッチ / PCキー） -->
+        <div class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800" title="画面サイズに合わせて自動切替されますが、手動でも変更できます">
+          <button id="btn-mode-touch" onclick="setInputMode('touch')" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all">
+            <i data-lucide="smartphone" class="w-3.5 h-3.5"></i>
+            <span class="hidden md:inline">タッチ</span>
+          </button>
+          <button id="btn-mode-pc" onclick="setInputMode('pc')" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all">
+            <i data-lucide="keyboard" class="w-3.5 h-3.5"></i>
+            <span class="hidden md:inline">PC・キー</span>
+          </button>
+        </div>
+
+        <!-- 修正モードトグル（マイナス・直接入力） -->
+        <button id="btn-edit-mode" onclick="toggleEditMode()" class="btn-press flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800">
+          <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>
+          <span>修正(-/入力)</span>
+          <span id="edit-mode-badge" class="w-2 h-2 rounded-full bg-slate-500"></span>
+        </button>
+
+        <!-- 履歴ボタン -->
+        <button onclick="openHistoryModal()" class="btn-press flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all relative">
+          <i data-lucide="history" class="w-3.5 h-3.5 text-sky-400"></i>
+          <span>履歴</span>
+          <span id="history-count-badge" class="hidden bg-sky-500 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded-full">0</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- モバイル・タブレット用 スティッキー合計バー（lg未満で表示） -->
+    <div class="lg:hidden bg-slate-925 border-t border-slate-800/80 px-4 py-2 flex items-center justify-between">
+      <div class="flex items-center gap-3 text-xs text-slate-400">
+        <span>硬貨: <strong id="mobile-coin-total" class="text-slate-200 font-mono">¥0</strong></span>
+        <span>紙幣: <strong id="mobile-bill-total" class="text-slate-200 font-mono">¥0</strong></span>
+      </div>
+      <div class="flex items-baseline gap-1.5">
+        <span class="text-xs text-slate-400 font-bold">合計</span>
+        <span id="mobile-grand-total" class="text-xl font-black font-mono text-emerald-400 tracking-tight">¥0</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ（2カラムレイアウト） -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      
+      <!-- 左側：メインカウントエリア (7カラム) -->
+      <section class="lg:col-span-7 flex flex-col gap-3.5">
+        
+        <!-- フィルタータブ ＆ オプション -->
+        <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/70 p-2 rounded-2xl border border-slate-800/80">
+          <!-- 表示フィルタータブ -->
+          <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800/80">
+            <button onclick="setFilter('all')" id="tab-all" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all">すべて</button>
+            <button onclick="setFilter('coin')" id="tab-coin" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all">硬貨のみ</button>
+            <button onclick="setFilter('bill')" id="tab-bill" class="filter-tab px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all">紙幣のみ</button>
+          </div>
+
+          <!-- 2,000円札表示切替 ＆ キー操作ヒント -->
+          <div class="flex items-center gap-3 px-2">
+            <label class="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none hover:text-slate-200">
+              <input type="checkbox" id="toggle-2000" onchange="toggle2000Yen()" class="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0">
+              <span>2,000円札を表示</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- PCキー操作モード時のガイドバナー -->
+        <div id="pc-key-guide" class="hidden bg-sky-950/40 border border-sky-800/50 rounded-xl px-3.5 py-2 text-xs text-sky-300 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="info" class="w-4 h-4 text-sky-400 shrink-0"></i>
+            <span><strong>PCキー操作：</strong> 入力欄にフォーカスして <kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-mono">↑</kbd><kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-mono">↓</kbd> で±1、<kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-mono">Shift+↑↓</kbd> で±10、<kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-mono">Tab</kbd> で次の金種へ移動できます。</span>
+          </div>
+        </div>
+
+        <!-- 金種カード一覧コンテナ -->
+        <div id="denominations-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+          <!-- JavaScriptで動的に生成されます -->
+        </div>
+
+      </section>
+
+      <!-- 右側：計算・集計サイドエリア (5カラム) -->
+      <aside class="lg:col-span-5 lg:sticky lg:top-20 flex flex-col gap-4">
+        
+        <!-- 集計結果カード（JPEG出力対象エリア） -->
+        <div id="receipt-capture-area" class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+          
+          <!-- 上部：合計金額ディスプレイ -->
+          <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-850 p-5 border-b border-slate-800 relative">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <i data-lucide="calculator" class="w-3.5 h-3.5 text-emerald-400"></i>
+                合計金額 (TOTAL)
+              </span>
+              <span id="receipt-timestamp" class="text-[11px] font-mono text-slate-500"></span>
+            </div>
+            
+            <!-- 特大合計金額 -->
+            <div class="my-2 flex items-baseline justify-end gap-1 overflow-x-auto">
+              <span class="text-2xl sm:text-3xl font-bold text-emerald-400 font-mono">¥</span>
+              <span id="grand-total-display" class="text-4xl sm:text-5xl font-black font-mono text-white tracking-tight">0</span>
+            </div>
+
+            <!-- 内訳サマリー（硬貨小計 / 紙幣小計 / 総枚数） -->
+            <div class="grid grid-cols-3 gap-2 pt-3 mt-3 border-t border-slate-800/80 text-center">
+              <div class="bg-slate-950/60 rounded-xl p-2 border border-slate-800/50">
+                <div class="text-[10px] text-slate-400 font-medium">硬貨合計</div>
+                <div id="coin-subtotal-display" class="text-xs sm:text-sm font-bold font-mono text-amber-300 mt-0.5">¥0</div>
+              </div>
+              <div class="bg-slate-950/60 rounded-xl p-2 border border-slate-800/50">
+                <div class="text-[10px] text-slate-400 font-medium">紙幣合計</div>
+                <div id="bill-subtotal-display" class="text-xs sm:text-sm font-bold font-mono text-sky-300 mt-0.5">¥0</div>
+              </div>
+              <div class="bg-slate-950/60 rounded-xl p-2 border border-slate-800/50">
+                <div class="text-[10px] text-slate-400 font-medium">総枚数</div>
+                <div id="total-count-display" class="text-xs sm:text-sm font-bold font-mono text-slate-200 mt-0.5">0枚</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 中部：計算式リスト（各硬貨・紙幣 × 枚数 = 小計） -->
+          <div class="p-4 bg-slate-900/95">
+            <div class="flex items-center justify-between mb-2.5">
+              <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">計算内訳</h2>
+              <label class="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer select-none hover:text-slate-200">
+                <input type="checkbox" id="toggle-hide-zero" onchange="renderCalculationList()" class="rounded bg-slate-800 border-slate-700 text-sky-500 focus:ring-0">
+                <span>0枚の金種を隠す</span>
+              </label>
+            </div>
+
+            <!-- 計算式行リスト -->
+            <div id="calculation-list" class="divide-y divide-slate-800/70 font-mono text-xs sm:text-sm">
+              <!-- JavaScriptで動的に生成されます -->
+            </div>
+          </div>
+        </div>
+
+        <!-- アクションボタン群（コピー / CSV / JPEG / 履歴保存 / リセット） -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-2.5 shadow-lg">
+          <div class="text-xs font-bold text-slate-400 mb-0.5">出力・データ管理</div>
+          
+          <div class="grid grid-cols-2 gap-2">
+            <!-- クリップボードコピー -->
+            <button onclick="copyToClipboard()" class="btn-press flex items-center justify-center gap-1.5 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 px-3 rounded-xl text-xs sm:text-sm shadow-md shadow-sky-900/30">
+              <i data-lucide="copy" class="w-4 h-4"></i>
+              <span>結果をコピー</span>
+            </button>
+
+            <!-- 履歴に保存 -->
+            <button onclick="openSaveHistoryModal()" class="btn-press flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl text-xs sm:text-sm shadow-md shadow-emerald-900/30">
+              <i data-lucide="bookmark-plus" class="w-4 h-4"></i>
+              <span>履歴に記録</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2">
+            <!-- CSVダウンロード -->
+            <button onclick="exportCSV()" class="btn-press flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-2 px-2.5 rounded-xl text-xs border border-slate-700">
+              <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-emerald-400"></i>
+              <span>CSV出力</span>
+            </button>
+
+            <!-- JPEG画像出力 -->
+            <button onclick="exportJPEG()" class="btn-press flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-2 px-2.5 rounded-xl text-xs border border-slate-700">
+              <i data-lucide="image" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span>JPEG保存</span>
+            </button>
+
+            <!-- リセットボタン -->
+            <button onclick="openResetModal()" class="btn-press flex items-center justify-center gap-1.5 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 font-semibold py-2 px-2.5 rounded-xl text-xs border border-rose-800/60">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-rose-400"></i>
+              <span>リセット</span>
+            </button>
+          </div>
+        </div>
+
+      </aside>
+    </div>
+  </main>
+
+  <!-- トースト通知 -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- リセット確認モーダル -->
+  <div id="reset-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-5 shadow-2xl transform transition-all">
+      <div class="flex items-center gap-3 text-rose-400 mb-3">
+        <div class="w-10 h-10 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center shrink-0">
+          <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-base font-bold text-white">カウントをリセットしますか？</h3>
+      </div>
+      <p class="text-xs sm:text-sm text-slate-300 leading-relaxed mb-5">
+        すべての硬貨と紙幣の枚数が「0」に戻ります。必要であれば先に「履歴に記録」を行ってください。
+      </p>
+      <div class="flex items-center justify-end gap-2.5">
+        <button onclick="closeModal('reset-modal')" class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300">
+          キャンセル
+        </button>
+        <button onclick="confirmReset()" class="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-900/40">
+          すべて0にする
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 履歴保存モーダル -->
+  <div id="save-history-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 shadow-2xl">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="bookmark-plus" class="w-5 h-5 text-emerald-400"></i>
+          集計結果を履歴に記録
+        </h3>
+        <button onclick="closeModal('save-history-modal')" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 mb-4 flex items-center justify-between">
+        <span class="text-xs text-slate-400">現在の合計金額</span>
+        <span id="modal-save-total" class="text-xl font-black font-mono text-emerald-400">¥0</span>
+      </div>
+      <div class="mb-4">
+        <label for="history-memo-input" class="block text-xs font-bold text-slate-300 mb-1.5">メモ・タイトル（任意）</label>
+        <input type="text" id="history-memo-input" placeholder="例：レジ締め、貯金箱集計、イベント釣り銭" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500">
+      </div>
+      <div class="flex items-center justify-end gap-2.5">
+        <button onclick="closeModal('save-history-modal')" class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300">
+          キャンセル
+        </button>
+        <button onclick="saveHistory()" class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/40">
+          保存する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 履歴一覧モーダル -->
+  <div id="history-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3 sm:p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl">
+      <div class="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+          <i data-lucide="history" class="w-5 h-5 text-sky-400"></i>
+          保存された集計履歴
+        </h3>
+        <button onclick="closeModal('history-modal')" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      
+      <div id="history-list-container" class="p-4 sm:p-5 overflow-y-auto flex-1 flex flex-col gap-3">
+        <!-- JavaScriptで履歴を生成 -->
+      </div>
+
+      <div class="p-4 border-t border-slate-800 flex items-center justify-between bg-slate-925 rounded-b-2xl">
+        <span class="text-xs text-slate-400">ブラウザ内に自動保存されます</span>
+        <button onclick="closeModal('history-modal')" class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white">
+          閉じる
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * 日本円金種マスターデータ（実際の硬貨・紙幣の色合いと特徴を再現）
+     */
+    const DENOMINATIONS = [
+      // 紙幣 (Bills)
+      {
+        id: '10000',
+        value: 10000,
+        label: '10,000円',
+        shortLabel: '1万',
+        type: 'bill',
+        accentBorder: 'border-l-amber-700',
+        badgeBg: 'bg-gradient-to-br from-amber-800 to-orange-950 text-amber-100 border-amber-600/60',
+        btnAccent: 'hover:border-amber-600/70',
+        tagColor: 'text-amber-400'
+      },
+      {
+        id: '5000',
+        value: 5000,
+        label: '5,000円',
+        shortLabel: '5千',
+        type: 'bill',
+        accentBorder: 'border-l-purple-600',
+        badgeBg: 'bg-gradient-to-br from-purple-800 to-indigo-950 text-purple-100 border-purple-500/60',
+        btnAccent: 'hover:border-purple-500/70',
+        tagColor: 'text-purple-400'
+      },
+      {
+        id: '2000',
+        value: 2000,
+        label: '2,000円',
+        shortLabel: '2千',
+        type: 'bill',
+        accentBorder: 'border-l-emerald-600',
+        badgeBg: 'bg-gradient-to-br from-emerald-800 to-teal-950 text-emerald-100 border-emerald-500/60',
+        btnAccent: 'hover:border-emerald-500/70',
+        tagColor: 'text-emerald-400',
+        optional: true
+      },
+      {
+        id: '1000',
+        value: 1000,
+        label: '1,000円',
+        shortLabel: '1千',
+        type: 'bill',
+        accentBorder: 'border-l-blue-600',
+        badgeBg: 'bg-gradient-to-br from-blue-800 to-slate-900 text-blue-100 border-blue-500/60',
+        btnAccent: 'hover:border-blue-500/70',
+        tagColor: 'text-blue-400'
+      },
+      // 硬貨 (Coins)
+      {
+        id: '500',
+        value: 500,
+        label: '500円',
+        shortLabel: '500',
+        type: 'coin',
+        accentBorder: 'border-l-amber-400',
+        badgeBg: 'bg-gradient-to-br from-yellow-300 via-amber-400 to-amber-500 text-slate-950 border-yellow-200 ring-2 ring-slate-400/50',
+        btnAccent: 'hover:border-amber-400/70',
+        tagColor: 'text-amber-300'
+      },
+      {
+        id: '100',
+        value: 100,
+        label: '100円',
+        shortLabel: '100',
+        type: 'coin',
+        accentBorder: 'border-l-slate-300',
+        badgeBg: 'bg-gradient-to-br from-slate-200 via-slate-300 to-slate-400 text-slate-950 border-white/80',
+        btnAccent: 'hover:border-slate-300/70',
+        tagColor: 'text-slate-200'
+      },
+      {
+        id: '50',
+        value: 50,
+        label: '50円',
+        shortLabel: '50',
+        type: 'coin',
+        hasHole: true,
+        accentBorder: 'border-l-slate-400',
+        badgeBg: 'bg-gradient-to-br from-slate-300 via-slate-400 to-slate-500 text-slate-950 border-slate-200/70',
+        btnAccent: 'hover:border-slate-400/70',
+        tagColor: 'text-slate-300'
+      },
+      {
+        id: '10',
+        value: 10,
+        label: '10円',
+        shortLabel: '10',
+        type: 'coin',
+        accentBorder: 'border-l-orange-700',
+        badgeBg: 'bg-gradient-to-br from-orange-600 via-amber-700 to-orange-900 text-orange-50 border-orange-400/60',
+        btnAccent: 'hover:border-orange-500/70',
+        tagColor: 'text-orange-400'
+      },
+      {
+        id: '5',
+        value: 5,
+        label: '5円',
+        shortLabel: '5',
+        type: 'coin',
+        hasHole: true,
+        accentBorder: 'border-l-yellow-500',
+        badgeBg: 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-amber-600 text-slate-950 border-yellow-200/80',
+        btnAccent: 'hover:border-yellow-500/70',
+        tagColor: 'text-yellow-400'
+      },
+      {
+        id: '1',
+        value: 1,
+        label: '1円',
+        shortLabel: '1',
+        type: 'coin',
+        accentBorder: 'border-l-zinc-400',
+        badgeBg: 'bg-gradient-to-br from-zinc-100 via-zinc-300 to-zinc-400 text-zinc-900 border-white',
+        btnAccent: 'hover:border-zinc-300/70',
+        tagColor: 'text-zinc-300'
+      }
+    ];
+
+    const STORAGE_KEY_COUNTS = 'jpy_counter_counts_v1';
+    const STORAGE_KEY_SETTINGS = 'jpy_counter_settings_v1';
+    const STORAGE_KEY_HISTORY = 'jpy_counter_history_v1';
+
+    // アプリケーション状態
+    let counts = {};
+    let settings = {
+      show2000: false,
+      hideZero: false,
+      filter: 'all', // 'all' | 'coin' | 'bill'
+      editMode: false, // マイナスボタン・直接入力常時表示
+      inputMode: 'auto' // 'touch' | 'pc'
+    };
+    let historyList = [];
+
+    /**
+     * 初期化処理
+     */
+    function initApp() {
+      // デフォルトカウント初期化
+      DENOMINATIONS.forEach(d => counts[d.id] = 0);
+
+      // LocalStorageから復元
+      try {
+        const savedCounts = JSON.parse(localStorage.getItem(STORAGE_KEY_COUNTS));
+        if (savedCounts) {
+          DENOMINATIONS.forEach(d => {
+            if (typeof savedCounts[d.id] === 'number' && savedCounts[d.id] >= 0) {
+              counts[d.id] = Math.floor(savedCounts[d.id]);
+            }
+          });
+        }
+
+        const savedSettings = JSON.parse(localStorage.getItem(STORAGE_KEY_SETTINGS));
+        if (savedSettings) {
+          settings = { ...settings, ...savedSettings };
+        }
+
+        const savedHistory = JSON.parse(localStorage.getItem(STORAGE_KEY_HISTORY));
+        if (Array.isArray(savedHistory)) {
+          historyList = savedHistory;
+        }
+      } catch (e) {
+        console.error('データの読み込みに失敗しました:', e);
+      }
+
+      // 操作モードの自動判定（初回またはauto時）
+      if (settings.inputMode === 'auto') {
+        const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.innerWidth < 1024;
+        setInputMode(isTouch ? 'touch' : 'pc', false);
+      } else {
+        setInputMode(settings.inputMode, false);
+      }
+
+      // UI状態の反映
+      document.getElementById('toggle-2000').checked = settings.show2000;
+      document.getElementById('toggle-hide-zero').checked = settings.hideZero;
+      updateEditModeUI();
+      updateFilterTabsUI();
+      updateHistoryBadge();
+      updateTimestamp();
+
+      // 描画
+      renderDenominationCards();
+      updateTotalsAndCalculations();
+      lucide.createIcons();
+
+      // 1分ごとにタイムスタンプ更新
+      setInterval(updateTimestamp, 60000);
+    }
+
+    /**
+     * データの自動保存
+     */
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY_COUNTS, JSON.stringify(counts));
+        localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+      } catch (e) {
+        console.error('保存エラー:', e);
+      }
+    }
+
+    /**
+     * 操作モード切替（タッチ / PC・キー）
+     */
+    function setInputMode(mode, shouldSave = true) {
+      settings.inputMode = mode;
+      document.body.classList.remove('mode-touch', 'mode-pc');
+      document.body.classList.add(`mode-${mode}`);
+
+      const btnTouch = document.getElementById('btn-mode-touch');
+      const btnPc = document.getElementById('btn-mode-pc');
+      const pcGuide = document.getElementById('pc-key-guide');
+
+      if (mode === 'touch') {
+        btnTouch.className = 'flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-600 text-white shadow';
+        btnPc.className = 'flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-slate-200';
+        pcGuide.classList.add('hidden');
+      } else {
+        btnPc.className = 'flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-600 text-white shadow';
+        btnTouch.className = 'flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-slate-200';
+        pcGuide.classList.remove('hidden');
+      }
+
+      if (shouldSave) {
+        saveState();
+        renderDenominationCards();
+        lucide.createIcons();
+      }
+    }
+
+    /**
+     * 修正モード（-1 / -10 / 直接入力）の切替
+     */
+    function toggleEditMode() {
+      settings.editMode = !settings.editMode;
+      updateEditModeUI();
+      saveState();
+      renderDenominationCards();
+      lucide.createIcons();
+    }
+
+    function updateEditModeUI() {
+      const btn = document.getElementById('btn-edit-mode');
+      const badge = document.getElementById('edit-mode-badge');
+      if (settings.editMode) {
+        btn.className = 'btn-press flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all bg-amber-500/20 border-amber-500/60 text-amber-300 shadow-sm shadow-amber-500/10';
+        badge.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+      } else {
+        btn.className = 'btn-press flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800';
+        badge.className = 'w-2 h-2 rounded-full bg-slate-500';
+      }
+    }
+
+    /**
+     * フィルタータブ切替
+     */
+    function setFilter(filterType) {
+      settings.filter = filterType;
+      updateFilterTabsUI();
+      saveState();
+      renderDenominationCards();
+      lucide.createIcons();
+    }
+
+    function updateFilterTabsUI() {
+      ['all', 'coin', 'bill'].forEach(t => {
+        const el = document.getElementById(`tab-${t}`);
+        if (settings.filter === t) {
+          el.className = 'filter-tab px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-slate-800 text-white shadow border border-slate-700';
+        } else {
+          el.className = 'filter-tab px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-slate-200';
+        }
+      });
+    }
+
+    /**
+     * 2,000円札の表示切替
+     */
+    function toggle2000Yen() {
+      settings.show2000 = document.getElementById('toggle-2000').checked;
+      saveState();
+      renderDenominationCards();
+      updateTotalsAndCalculations();
+      lucide.createIcons();
+    }
+
+    /**
+     * 枚数の増減処理
+     */
+    function changeCount(id, delta) {
+      const current = counts[id] || 0;
+      const next = Math.max(0, current + delta);
+      counts[id] = next;
+      saveState();
+      updateSingleCardUI(id);
+      updateTotalsAndCalculations();
+    }
+
+    /**
+     * 直接入力による枚数設定
+     */
+    function setDirectCount(id, rawValue) {
+      let val = parseInt(rawValue, 10);
+      if (isNaN(val) || val < 0) val = 0;
+      if (val > 999999) val = 999999;
+      counts[id] = val;
+      saveState();
+      updateSingleCardUI(id, false);
+      updateTotalsAndCalculations();
+    }
+
+    /**
+     * 個別カードの数値表示更新とアニメーション
+     */
+    function updateSingleCardUI(id, animate = true) {
+      const countDisplay = document.getElementById(`count-val-${id}`);
+      const subtotalDisplay = document.getElementById(`card-sub-${id}`);
+      const denom = DENOMINATIONS.find(d => d.id === id);
+
+      if (countDisplay) {
+        if (countDisplay.tagName === 'INPUT') {
+          countDisplay.value = counts[id];
+        } else {
+          countDisplay.textContent = counts[id].toLocaleString();
+        }
+        if (animate) {
+          countDisplay.classList.remove('animate-pop');
+          void countDisplay.offsetWidth; // reflow
+          countDisplay.classList.add('animate-pop');
+        }
+      }
+
+      if (subtotalDisplay && denom) {
+        const sub = counts[id] * denom.value;
+        subtotalDisplay.textContent = `¥${sub.toLocaleString()}`;
+        subtotalDisplay.className = sub > 0 
+          ? `text-xs font-mono font-bold ${denom.tagColor}` 
+          : 'text-xs font-mono text-slate-500';
+      }
+    }
+
+    /**
+     * 左側メインエリアの金種カード一覧を描画
+     */
+    function renderDenominationCards() {
+      const grid = document.getElementById('denominations-grid');
+      grid.innerHTML = '';
+
+      const filtered = DENOMINATIONS.filter(d => {
+        if (d.optional && !settings.show2000) return false;
+        if (settings.filter !== 'all' && d.type !== settings.filter) return false;
+        return true;
+      });
+
+      filtered.forEach((d, index) => {
+        const count = counts[d.id] || 0;
+        const subtotal = count * d.value;
+        const showDirectInput = settings.editMode || settings.inputMode === 'pc';
+
+        // 硬貨・紙幣の視覚的バッジ（色と形状で直感識別）
+        let iconHtml = '';
+        if (d.type === 'coin') {
+          iconHtml = `
+            <div class="w-11 h-11 rounded-full ${d.badgeBg} border-2 flex items-center justify-center font-mono font-black text-xs shadow-md shrink-0 relative">
+              ${d.hasHole ? '<span class="w-3 h-3 rounded-full bg-slate-900 border border-black/30 absolute"></span>' : ''}
+              <span class="${d.hasHole ? 'opacity-0' : ''}">${d.shortLabel}</span>
+            </div>
+          `;
+        } else {
+          iconHtml = `
+            <div class="w-12 h-9 rounded-lg ${d.badgeBg} border flex flex-col items-center justify-center font-mono font-black text-[11px] leading-tight shadow-md shrink-0 relative overflow-hidden">
+              <div class="w-full h-1 bg-white/20 absolute top-0"></div>
+              <span>¥${d.shortLabel}</span>
+            </div>
+          `;
+        }
+
+        // 枚数表示部（直接入力 or クリックで直接入力切替可能な表示）
+        let countAreaHtml = '';
+        if (showDirectInput) {
+          countAreaHtml = `
+            <div class="flex items-center gap-1">
+              <input
+                type="number"
+                id="count-val-${d.id}"
+                value="${count}"
+                min="0"
+                inputmode="numeric"
+                aria-label="${d.label}の枚数"
+                onfocus="this.select()"
+                oninput="setDirectCount('${d.id}', this.value)"
+                onkeydown="handleInputKeydown(event, '${d.id}')"
+                class="w-20 sm:w-24 bg-slate-950 border border-slate-700 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 rounded-xl px-2 py-1 text-right font-mono font-black text-xl sm:text-2xl text-white outline-none transition-all"
+              />
+              <span class="text-xs text-slate-400 font-bold">枚</span>
+            </div>
+          `;
+        } else {
+          countAreaHtml = `
+            <button
+              type="button"
+              onclick="enableInlineInput('${d.id}')"
+              title="タップして直接入力"
+              class="group flex items-baseline gap-1 px-2.5 py-1 rounded-xl hover:bg-slate-800/80 transition-colors cursor-text"
+            >
+              <span id="count-val-${d.id}" class="font-mono font-black text-2xl sm:text-3xl text-white tracking-tight">${count.toLocaleString()}</span>
+              <span class="text-xs text-slate-400 font-bold group-hover:text-sky-400">枚</span>
+            </button>
+          `;
+        }
+
+        // マイナスボタン行（修正モード時のみ表示）
+        const minusButtonsHtml = settings.editMode ? `
+          <div class="grid grid-cols-2 gap-1.5 mt-2 pt-2 border-t border-slate-800/80">
+            <button type="button" onclick="changeCount('${d.id}', -1)" class="btn-press py-1.5 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/70 text-rose-300 border border-rose-800/50 font-mono font-bold text-xs flex items-center justify-center gap-1">
+              <span>-1</span>
+            </button>
+            <button type="button" onclick="changeCount('${d.id}', -10)" class="btn-press py-1.5 px-2 rounded-lg bg-rose-950/50 hover:bg-rose-900/70 text-rose-300 border border-rose-800/50 font-mono font-bold text-xs flex items-center justify-center gap-1">
+              <span>-10</span>
+            </button>
+          </div>
+        ` : '';
+
+        const card = document.createElement('div');
+        card.className = `bg-slate-900/90 border border-slate-800 border-l-4 ${d.accentBorder} rounded-2xl p-3 sm:p-3.5 shadow-md hover:border-slate-700 transition-all flex flex-col justify-between`;
+        card.innerHTML = `
+          <!-- 上段：金種アイコン・名称 ＆ 現在の枚数 -->
+          <div class="flex items-center justify-between gap-2 mb-2.5">
+            <div class="flex items-center gap-2.5 min-w-0">
+              ${iconHtml}
+              <div class="min-w-0">
+                <div class="font-extrabold text-sm sm:text-base text-white truncate">${d.label}</div>
+                <div id="card-sub-${d.id}" class="text-xs font-mono ${subtotal > 0 ? `font-bold ${d.tagColor}` : 'text-slate-500'}">
+                  ¥${subtotal.toLocaleString()}
+                </div>
+              </div>
+            </div>
+            <div id="count-wrapper-${d.id}" class="shrink-0">
+              ${countAreaHtml}
+            </div>
+          </div>
+
+          <!-- 下段：メインカウントボタン (+1 / +10) -->
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" onclick="changeCount('${d.id}', 1)" class="btn-press count-btn rounded-xl bg-slate-800 hover:bg-slate-750 active:bg-slate-700 text-white border border-slate-700 ${d.btnAccent} font-mono font-extrabold shadow-sm flex items-center justify-center gap-1">
+              <span class="text-sky-400">+</span>1
+            </button>
+            <button type="button" onclick="changeCount('${d.id}', 10)" class="btn-press count-btn rounded-xl bg-slate-800/90 hover:bg-slate-750 active:bg-slate-700 text-white border border-slate-700 ${d.btnAccent} font-mono font-extrabold shadow-sm flex items-center justify-center gap-1">
+              <span class="text-emerald-400">+</span>10
+            </button>
+          </div>
+
+          ${minusButtonsHtml}
+        `;
+
+        grid.appendChild(card);
+      });
+    }
+
+    /**
+     * タッチモード時に枚数ラベルをタップして一時的に数値入力欄へ切り替え
+     */
+    function enableInlineInput(id) {
+      const wrapper = document.getElementById(`count-wrapper-${id}`);
+      if (!wrapper) return;
+      const currentVal = counts[id] || 0;
+      wrapper.innerHTML = `
+        <div class="flex items-center gap-1">
+          <input
+            type="number"
+            id="count-val-${id}"
+            value="${currentVal}"
+            min="0"
+            inputmode="numeric"
+            onblur="renderDenominationCards()"
+            oninput="setDirectCount('${id}', this.value)"
+            onkeydown="if(event.key==='Enter'){this.blur();}"
+            class="w-24 bg-slate-950 border-2 border-sky-500 rounded-xl px-2 py-1 text-right font-mono font-black text-xl text-white outline-none"
+          />
+          <span class="text-xs text-slate-400 font-bold">枚</span>
+        </div>
+      `;
+      const input = document.getElementById(`count-val-${id}`);
+      input.focus();
+      input.select();
+    }
+
+    /**
+     * PCキー操作モードでのキーボードショートカット（上下矢印で±1、Shift+上下で±10）
+     */
+    function handleInputKeydown(e, id) {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        changeCount(id, e.shiftKey ? 10 : 1);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        changeCount(id, e.shiftKey ? -10 : -1);
+      }
+    }
+
+    /**
+     * 合計金額・小計・右側計算式リストの更新
+     */
+    function updateTotalsAndCalculations() {
+      let coinTotal = 0;
+      let billTotal = 0;
+      let totalPieces = 0;
+
+      DENOMINATIONS.forEach(d => {
+        if (d.optional && !settings.show2000) return;
+        const c = counts[d.id] || 0;
+        const sub = c * d.value;
+        totalPieces += c;
+        if (d.type === 'coin') {
+          coinTotal += sub;
+        } else {
+          billTotal += sub;
+        }
+      });
+
+      const grandTotal = coinTotal + billTotal;
+
+      // PCサイドバー表示更新
+      document.getElementById('grand-total-display').textContent = grandTotal.toLocaleString();
+      document.getElementById('coin-subtotal-display').textContent = `¥${coinTotal.toLocaleString()}`;
+      document.getElementById('bill-subtotal-display').textContent = `¥${billTotal.toLocaleString()}`;
+      document.getElementById('total-count-display').textContent = `${totalPieces.toLocaleString()}枚`;
+
+      // モバイルスティッキーバー表示更新
+      document.getElementById('mobile-grand-total').textContent = `¥${grandTotal.toLocaleString()}`;
+      document.getElementById('mobile-coin-total').textContent = `¥${coinTotal.toLocaleString()}`;
+      document.getElementById('mobile-bill-total').textContent = `¥${billTotal.toLocaleString()}`;
+
+      renderCalculationList();
+    }
+
+    /**
+     * 右側サイドエリアの計算式リスト描画（例: 100円 × 5枚 = 500円）
+     */
+    function renderCalculationList() {
+      const hideZero = document.getElementById('toggle-hide-zero').checked;
+      settings.hideZero = hideZero;
+      saveState();
+
+      const listEl = document.getElementById('calculation-list');
+      listEl.innerHTML = '';
+
+      let visibleRows = 0;
+
+      DENOMINATIONS.forEach(d => {
+        if (d.optional && !settings.show2000) return;
+        const c = counts[d.id] || 0;
+        if (hideZero && c === 0) return;
+
+        visibleRows++;
+        const sub = c * d.value;
+        const isActive = c > 0;
+
+        const row = document.createElement('div');
+        row.className = `py-2 flex items-center justify-between gap-2 ${isActive ? 'text-slate-100' : 'text-slate-500'}`;
+        row.innerHTML = `
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="w-2 h-2 rounded-full shrink-0 ${isActive ? d.badgeBg.split(' ')[1] : 'bg-slate-700'}"></span>
+            <span class="font-bold w-16 sm:w-20 text-right shrink-0">${d.label}</span>
+            <span class="text-slate-500">×</span>
+            <span class="${isActive ? 'text-sky-400 font-bold' : ''} w-12 text-right shrink-0">${c.toLocaleString()}枚</span>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <span class="text-slate-600">=</span>
+            <span class="font-bold w-24 text-right ${isActive ? 'text-white' : 'text-slate-600'}">
+              ¥${sub.toLocaleString()}
+            </span>
+          </div>
+        `;
+        listEl.appendChild(row);
+      });
+
+      if (visibleRows === 0) {
+        listEl.innerHTML = `
+          <div class="py-8 text-center text-xs text-slate-500 font-sans">
+            カウントされた金種がありません
+          </div>
+        `;
+      }
+    }
+
+    /**
+     * 現在日時の取得・更新
+     */
+    function getFormattedDateTime() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      return `${y}/${m}/${d} ${hh}:${mm}`;
+    }
+
+    function updateTimestamp() {
+      const el = document.getElementById('receipt-timestamp');
+      if (el) el.textContent = getFormattedDateTime();
+    }
+
+    /**
+     * 集計テキスト生成（クリップボードコピー用）
+     */
+    function buildSummaryText() {
+      const lines = [];
+      lines.push(`【金種集計結果】 ${getFormattedDateTime()}`);
+      lines.push('------------------------------');
+
+      let coinTotal = 0;
+      let billTotal = 0;
+      let totalCount = 0;
+
+      DENOMINATIONS.forEach(d => {
+        if (d.optional && !settings.show2000) return;
+        const c = counts[d.id] || 0;
+        const sub = c * d.value;
+        if (c > 0) {
+          lines.push(`${d.label.padStart(8, ' ')} × ${String(c).padStart(4, ' ')}枚 = ¥${sub.toLocaleString()}`);
+        }
+        totalCount += c;
+        if (d.type === 'coin') coinTotal += sub;
+        else billTotal += sub;
+      });
+
+      if (totalCount === 0) {
+        lines.push('（カウントなし）');
+      }
+
+      lines.push('------------------------------');
+      lines.push(`硬貨合計: ¥${coinTotal.toLocaleString()}`);
+      lines.push(`紙幣合計: ¥${billTotal.toLocaleString()}`);
+      lines.push(`総枚数　: ${totalCount.toLocaleString()}枚`);
+      lines.push(`合計金額: ¥${(coinTotal + billTotal).toLocaleString()}`);
+      return lines.join('\n');
+    }
+
+    /**
+     * 1. クリップボードにコピー
+     */
+    function copyToClipboard() {
+      const text = buildSummaryText();
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast('集計結果をクリップボードにコピーしました', 'success');
+        }).catch(() => fallbackCopy(text));
+      } else {
+        fallbackCopy(text);
+      }
+    }
+
+    function fallbackCopy(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast('集計結果をクリップボードにコピーしました', 'success');
+      } catch (err) {
+        showToast('コピーに失敗しました', 'error');
+      }
+      document.body.removeChild(textarea);
+    }
+
+    /**
+     * 2. CSVダウンロード（Excel文字化け防止BOM付き）
+     */
+    function exportCSV() {
+      const rows = [
+        ['集計日時', getFormattedDateTime()],
+        [],
+        ['金種', '区分', '単価(円)', '枚数', '小計(円)']
+      ];
+
+      let grandTotal = 0;
+      let totalCount = 0;
+
+      DENOMINATIONS.forEach(d => {
+        if (d.optional && !settings.show2000) return;
+        const c = counts[d.id] || 0;
+        const sub = c * d.value;
+        grandTotal += sub;
+        totalCount += c;
+        rows.push([
+          d.label,
+          d.type === 'coin' ? '硬貨' : '紙幣',
+          d.value,
+          c,
+          sub
+        ]);
+      });
+
+      rows.push([]);
+      rows.push(['合計', '', '', totalCount, grandTotal]);
+
+      const csvContent = '\uFEFF' + rows.map(r => r.join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      const fileDate = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
+      a.href = url;
+      a.download = `金種集計_${fileDate}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast('CSVファイルをダウンロードしました', 'success');
+    }
+
+    /**
+     * 3. JPEG画像として出力
+     */
+    async function exportJPEG() {
+      const target = document.getElementById('receipt-capture-area');
+      if (!target || typeof html2canvas === 'undefined') {
+        showToast('画像生成ライブラリの読み込みに失敗しました', 'error');
+        return;
+      }
+
+      updateTimestamp();
+      showToast('JPEG画像を生成しています...', 'info');
+
+      try {
+        const canvas = await html2canvas(target, {
+          backgroundColor: '#0f172a',
+          scale: 2, // 高解像度出力
+          logging: false
+        });
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+        const a = document.createElement('a');
+        const fileDate = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
+        a.href = dataUrl;
+        a.download = `金種集計_${fileDate}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        showToast('JPEG画像を保存しました', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('画像の生成中にエラーが発生しました', 'error');
+      }
+    }
+
+    /**
+     * 4. リセットモーダル制御
+     */
+    function openResetModal() {
+      openModal('reset-modal');
+    }
+
+    function confirmReset() {
+      DENOMINATIONS.forEach(d => counts[d.id] = 0);
+      saveState();
+      renderDenominationCards();
+      updateTotalsAndCalculations();
+      closeModal('reset-modal');
+      showToast('すべてのカウントをリセットしました', 'info');
+    }
+
+    /**
+     * 5. 履歴記録・一覧表示・復元機能
+     */
+    function openSaveHistoryModal() {
+      let total = 0;
+      DENOMINATIONS.forEach(d => {
+        if (d.optional && !settings.show2000) return;
+        total += (counts[d.id] || 0) * d.value;
+      });
+      document.getElementById('modal-save-total').textContent = `¥${total.toLocaleString()}`;
+      document.getElementById('history-memo-input').value = '';
+      openModal('save-history-modal');
+      setTimeout(() => document.getElementById('history-memo-input').focus(), 100);
+    }
+
+    function saveHistory() {
+      const memo = document.getElementById('history-memo-input').value.trim() || '無題の集計';
+      let total = 0;
+      let pieces = 0;
+      const snapshot = {};
+
+      DENOMINATIONS.forEach(d => {
+        const c = counts[d.id] || 0;
+        snapshot[d.id] = c;
+        if (!d.optional || settings.show2000) {
+          total += c * d.value;
+          pieces += c;
+        }
+      });
+
+      const record = {
+        id: Date.now().toString(),
+        timestamp: getFormattedDateTime(),
+        memo,
+        total,
+        pieces,
+        counts: snapshot
+      };
+
+      historyList.unshift(record);
+      if (historyList.length > 50) historyList.pop(); // 最大50件保持
+      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(historyList));
+
+      updateHistoryBadge();
+      closeModal('save-history-modal');
+      showToast('集計結果を履歴に保存しました', 'success');
+    }
+
+    function openHistoryModal() {
+      renderHistoryList();
+      openModal('history-modal');
+    }
+
+    function renderHistoryList() {
+      const container = document.getElementById('history-list-container');
+      if (historyList.length === 0) {
+        container.innerHTML = `
+          <div class="py-12 text-center text-slate-500">
+            <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-2 opacity-40"></i>
+            <p class="text-sm font-bold">保存された履歴はまだありません</p>
+            <p class="text-xs mt-1">「履歴に記録」ボタンから現在の集計を保存できます</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      container.innerHTML = '';
+      historyList.forEach(item => {
+        // 内訳バッジ生成
+        const breakdownTags = DENOMINATIONS
+          .filter(d => (item.counts[d.id] || 0) > 0)
+          .map(d => `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-[11px] font-mono text-slate-300">${d.label}×<strong class="text-white">${item.counts[d.id]}</strong></span>`)
+          .join(' ');
+
+        const card = document.createElement('div');
+        card.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-col gap-2.5';
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="text-xs font-mono text-slate-400">${item.timestamp}</div>
+              <div class="font-bold text-sm text-white mt-0.5">${escapeHTML(item.memo)}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-lg font-black font-mono text-emerald-400">¥${item.total.toLocaleString()}</div>
+              <div class="text-[11px] text-slate-400 font-mono">計 ${item.pieces.toLocaleString()}枚</div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-1.5">
+            ${breakdownTags || '<span class="text-xs text-slate-500">内訳なし（0円）</span>'}
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800/80">
+            <button onclick="deleteHistoryItem('${item.id}')" class="px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-400 hover:bg-rose-950/60 transition-colors flex items-center gap-1">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              <span>削除</span>
+            </button>
+            <button onclick="restoreHistoryItem('${item.id}')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white transition-colors flex items-center gap-1">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+              <span>この内容を読み込む</span>
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    function restoreHistoryItem(id) {
+      const target = historyList.find(h => h.id === id);
+      if (!target) return;
+
+      DENOMINATIONS.forEach(d => {
+        counts[d.id] = target.counts[d.id] || 0;
+      });
+      if ((target.counts['2000'] || 0) > 0 && !settings.show2000) {
+        settings.show2000 = true;
+        document.getElementById('toggle-2000').checked = true;
+      }
+
+      saveState();
+      renderDenominationCards();
+      updateTotalsAndCalculations();
+      closeModal('history-modal');
+      showToast(`「${target.memo}」のデータを復元しました`, 'success');
+    }
+
+    function deleteHistoryItem(id) {
+      historyList = historyList.filter(h => h.id !== id);
+      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(historyList));
+      updateHistoryBadge();
+      renderHistoryList();
+      showToast('履歴を削除しました', 'info');
+    }
+
+    function updateHistoryBadge() {
+      const badge = document.getElementById('history-count-badge');
+      if (historyList.length > 0) {
+        badge.textContent = historyList.length;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    /**
+     * ユーティリティ（モーダル・トースト・XSS対策）
+     */
+    function openModal(id) {
+      const el = document.getElementById(id);
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+    }
+
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      el.classList.add('hidden');
+      el.classList.remove('flex');
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      
+      const colors = {
+        success: 'bg-emerald-950/95 border-emerald-500/60 text-emerald-200',
+        error: 'bg-rose-950/95 border-rose-500/60 text-rose-200',
+        info: 'bg-slate-900/95 border-sky-500/60 text-sky-200'
+      };
+
+      toast.className = `pointer-events-auto border ${colors[type]} backdrop-blur-md px-4 py-3 rounded-xl shadow-2xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transform transition-all duration-300 translate-y-2 opacity-0`;
+      toast.innerHTML = `<span>${escapeHTML(message)}</span>`;
+      
+      container.appendChild(toast);
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('translate-y-2', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+      }, 2800);
+    }
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>"']/g, match => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[match]));
+    }
+
+    // 起動
+    window.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>
